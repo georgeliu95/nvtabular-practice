@@ -1,143 +1,4 @@
 # External dependencies
-import os
-import pathlib
-
-import cudf  # cuDF is an implementation of Pandas-like Dataframe on GPU
-
-from nvtabular.utils import download_file
-from sklearn.model_selection import train_test_split
-
-INPUT_DATA_DIR = os.environ.get(
-    "INPUT_DATA_DIR", "~/nvt-examples/multigpu-movielens/data/"
-)
-BASE_DIR = pathlib.Path(INPUT_DATA_DIR).expanduser()
-zip_path = pathlib.Path(BASE_DIR, "ml-25m.zip")
-if not os.path.isfile(zip_path):
-    download_file(
-        "http://files.grouplens.org/datasets/movielens/ml-25m.zip", zip_path, redownload=False
-    )
-
-
-movies = cudf.read_csv(pathlib.Path(BASE_DIR, "ml-25m", "movies.csv"))
-movies["genres"] = movies["genres"].str.split("|")
-movies = movies.drop("title", axis=1)
-movies.to_parquet(pathlib.Path(BASE_DIR, "ml-25m", "movies_converted.parquet"))
-
-
-ratings = cudf.read_csv(pathlib.Path(BASE_DIR, "ml-25m", "ratings.csv"))
-ratings = ratings.drop("timestamp", axis=1)
-train, valid = train_test_split(ratings, test_size=0.2, random_state=42)
-train.to_parquet(pathlib.Path(BASE_DIR, "train.parquet"))
-valid.to_parquet(pathlib.Path(BASE_DIR, "valid.parquet"))
-
-
-# Standard Libraries
-import shutil
-
-# External Dependencies
-import cupy as cp
-import cudf
-import dask_cudf
-from dask_cuda import LocalCUDACluster
-from dask.distributed import Client
-from dask.utils import parse_bytes
-from dask.delayed import delayed
-import rmm
-
-# NVTabular
-import nvtabular as nvt
-import nvtabular.ops as ops
-from nvtabular.io import Shuffle
-from nvtabular.utils import device_mem_size
-
-
-# define some information about where to get our data
-input_path = pathlib.Path(BASE_DIR, "converted", "movielens")
-dask_workdir = pathlib.Path(BASE_DIR, "test_dask", "workdir")
-output_path = pathlib.Path(BASE_DIR, "test_dask", "output")
-stats_path = pathlib.Path(BASE_DIR, "test_dask", "stats")
-
-# Make sure we have a clean worker space for Dask
-if pathlib.Path.is_dir(dask_workdir):
-    shutil.rmtree(dask_workdir)
-dask_workdir.mkdir(parents=True)
-
-# Make sure we have a clean stats space for Dask
-if pathlib.Path.is_dir(stats_path):
-    shutil.rmtree(stats_path)
-stats_path.mkdir(parents=True)
-
-# Make sure we have a clean output path
-if pathlib.Path.is_dir(output_path):
-    shutil.rmtree(output_path)
-output_path.mkdir(parents=True)
-
-# Get device memory capacity
-capacity = device_mem_size(kind="total")
-
-
-
-# Deploy a Single-Machine Multi-GPU Cluster
-protocol = "tcp"  # "tcp" or "ucx"
-visible_devices = "0,1"  # Delect devices to place workers
-device_spill_frac = 0.5  # Spill GPU-Worker memory to host at this limit.
-# Reduce if spilling fails to prevent
-# device memory errors.
-cluster = None  # (Optional) Specify existing scheduler port
-if cluster is None:
-    cluster = LocalCUDACluster(
-        protocol=protocol,
-        CUDA_VISIBLE_DEVICES=visible_devices,
-        local_directory=dask_workdir,
-        device_memory_limit=capacity * device_spill_frac,
-    )
-
-# Create the distributed client
-client = Client(cluster)
-
-
-# Initialize RMM pool on ALL workers
-def _rmm_pool():
-    rmm.reinitialize(
-        pool_allocator=True,
-        initial_pool_size=None,  # Use default size
-    )
-
-
-client.run(_rmm_pool)
-
-
-movies = cudf.read_parquet(pathlib.Path(BASE_DIR, "ml-25m", "movies_converted.parquet"))
-joined = ["userId", "movieId"] >> nvt.ops.JoinExternal(movies, on=["movieId"])
-cat_features = joined >> nvt.ops.Categorify()
-ratings = nvt.ColumnGroup(["rating"]) >> (lambda col: (col > 3).astype("int8"))
-output = cat_features + ratings
-# USE client in NVTabular workfow
-workflow = nvt.Workflow(output, client=client)
-# !rm -rf $BASE_DIR/train
-# !rm -rf $BASE_DIR/valid
-train_iter = nvt.Dataset([str(pathlib.Path(BASE_DIR, "train.parquet"))], part_size="100MB")
-valid_iter = nvt.Dataset([str(pathlib.Path(BASE_DIR, "valid.parquet"))], part_size="100MB")
-workflow.fit(train_iter)
-workflow.save(pathlib.Path(BASE_DIR, "workflow"))
-shuffle = Shuffle.PER_WORKER  # Shuffle algorithm
-out_files_per_proc = 4  # Number of output files per worker
-workflow.transform(train_iter).to_parquet(
-    output_path=pathlib.Path(BASE_DIR, "train"),
-    shuffle=shuffle,
-    out_files_per_proc=out_files_per_proc,
-)
-workflow.transform(valid_iter).to_parquet(
-    output_path=pathlib.Path(BASE_DIR, "valid"),
-    shuffle=shuffle,
-    out_files_per_proc=out_files_per_proc,
-)
-
-client.shutdown()
-cluster.close()
-
-
-# External dependencies
 import argparse
 import glob
 import os
@@ -155,6 +16,7 @@ from nvtabular.loader.tensorflow import KerasSequenceLoader  # noqa: E402 isort:
 
 import tensorflow as tf  # noqa: E402 isort:skip
 import horovod.tensorflow as hvd  # noqa: E402 isort:skip
+
 
 parser = argparse.ArgumentParser(description="Process some integers.")
 parser.add_argument("--dir_in", default=None, help="Input directory")
@@ -280,5 +142,4 @@ hvd.join()
 # corrupting it.
 if hvd.rank() == 0:
     checkpoint.save(checkpoint_dir)
-
 
