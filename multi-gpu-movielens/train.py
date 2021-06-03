@@ -72,12 +72,12 @@ train_dataset_tf = KerasSequenceLoader(
     cat_names=CATEGORICAL_COLUMNS + CATEGORICAL_MH_COLUMNS,
     cont_names=NUMERIC_COLUMNS,
     engine="parquet",
-    shuffle=True,
+    shuffle=False,
     buffer_size=0.06,  # how many batches to load at once
     parts_per_chunk=1,
     global_size=hvd.size(),
     global_rank=hvd.rank(),
-    seed_fn=seed_fn,
+    seed_fn=None,
 )
 inputs = {}  # tf.keras.Input placeholders for each feature to be used
 emb_layers = []  # output of all embedding layers, which will be concatenated
@@ -98,13 +98,22 @@ for col in CATEGORICAL_COLUMNS + CATEGORICAL_MH_COLUMNS:
     )
 emb_layer = layers.DenseFeatures(emb_layers)
 x_emb_output = emb_layer(inputs)
-x = tf.keras.layers.Dense(128, activation="relu")(x_emb_output)
-x = tf.keras.layers.Dense(128, activation="relu")(x)
-x = tf.keras.layers.Dense(128, activation="relu")(x)
-x = tf.keras.layers.Dense(1, activation="sigmoid")(x)
+# x = tf.keras.layers.Dense(4096, activation="relu")(x_emb_output)
+# x = tf.keras.layers.Dense(1024, activation="relu")(x)
+# x = tf.keras.layers.Dense(256, activation="relu")(x)
+# x = tf.keras.layers.Dense(64, activation="sigmoid")(x)
+# x = tf.keras.layers.Dense(1, activation="sigmoid")
+
+x = tf.keras.layers.BatchNormalization()(x_emb_output)
+x = tf.keras.layers.Dense(4096, activation='sigmoid')(x)
+x = tf.keras.layers.Dense(1024, activation='sigmoid')(x)
+x = tf.keras.layers.Dense(256, activation='sigmoid')(x)
+x = tf.keras.layers.Dense(64, activation='sigmoid')(x)
+x = tf.keras.layers.Dense(1, activation='sigmoid')(x)
+
 model = tf.keras.Model(inputs=inputs, outputs=x)
 loss = tf.losses.BinaryCrossentropy()
-opt = tf.keras.optimizers.SGD(0.01 * hvd.size())
+opt = tf.keras.optimizers.Adam(0.001 * hvd.size())
 opt = hvd.DistributedOptimizer(opt)
 checkpoint_dir = "./checkpoints"
 checkpoint = tf.train.Checkpoint(model=model, optimizer=opt)
