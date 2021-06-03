@@ -63,9 +63,6 @@ out_files_per_proc = 4  # Number of output files per worker
 workflow.transform(train_dataset).to_parquet(
     output_path=os.path.join(INPUT_DATA_DIR, "train"),
     shuffle=nvt.io.Shuffle.PER_PARTITION,
-    cats=["userId", "movieId"],
-    labels=["rating"],
-    dtypes=dict_dtypes,
     out_files_per_proc=out_files_per_proc,
 )
 
@@ -73,9 +70,6 @@ workflow.transform(train_dataset).to_parquet(
 workflow.transform(valid_dataset).to_parquet(
     output_path=os.path.join(INPUT_DATA_DIR, "valid"),
     shuffle=False,
-    cats=["userId", "movieId"],
-    labels=["rating"],
-    dtypes=dict_dtypes,
     out_files_per_proc=out_files_per_proc,
 )
 
