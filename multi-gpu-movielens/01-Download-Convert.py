@@ -8,7 +8,7 @@ from nvtabular.utils import download_file
 
 
 INPUT_DATA_DIR = os.environ.get(
-    "INPUT_DATA_DIR", os.path.expanduser("~/nvt-examples/movielens/data/")
+    "INPUT_DATA_DIR", os.path.expanduser("~/nvt-examples/multigpu-movielens/data/")
 )
 
 
