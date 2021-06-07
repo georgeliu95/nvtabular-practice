@@ -95,28 +95,29 @@ ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 dist_dataset = mirrored_strategy.experimental_distribute_dataset(ds)
 
 
-@tf.function(experimental_relax_shapes=True)
-def training_step(inputs):
-    examples, labels = inputs
-    with tf.GradientTape() as tape:
-        probs = model(examples, training=True)
-        print(type(loss))
-        loss_value = loss(labels, probs)
-    grads = tape.gradient(loss_value, model.trainable_variables)
-    opt.apply_gradients(zip(grads, model.trainable_variables))
-    return loss_value
+with mirrored_strategy.scope():
+    @tf.function(experimental_relax_shapes=True)
+    def training_step(inputs):
+        examples, labels = inputs
+        with tf.GradientTape() as tape:
+            probs = model(examples, training=True)
+            print(type(loss))
+            loss_value = loss(labels, probs)
+        grads = tape.gradient(loss_value, model.trainable_variables)
+        opt.apply_gradients(zip(grads, model.trainable_variables))
+        return loss_value
 
 
-@tf.function
-def distributed_train_step(inputs):
-    per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
-    return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+    @tf.function
+    def distributed_train_step(inputs):
+        per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
+        return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
 
-for batch, (example, label) in enumerate(dist_dataset):
-    # if batch ==0:
-    #     print(example)
-    loss_val = distributed_train_step((example, label))
-    if batch % 100 ==0:
-        print("Step #%d\tLoss: %.6f" % (batch, loss_val))
+    for batch, (example, label) in enumerate(dist_dataset):
+        # if batch ==0:
+        #     print(example)
+        loss_val = distributed_train_step((example, label))
+        if batch % 100 ==0:
+            print("Step #%d\tLoss: %.6f" % (batch, loss_val))
 
