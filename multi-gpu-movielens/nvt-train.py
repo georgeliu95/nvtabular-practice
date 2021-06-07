@@ -144,6 +144,8 @@ for batch, (examples, labels) in enumerate(train_dataset_tf):
     loss_value = training_step(examples, labels, batch == 0)
     if batch % 100 == 0 and hvd.local_rank() == 0:
         print("Step #%d\tLoss: %.6f" % (batch, loss_value))
+    if batch == int(1200 / hvd.size()):
+            break
 hvd.join()
 
 # Horovod: save checkpoints only on worker 0 to prevent other workers from

@@ -9,6 +9,8 @@ import os
 from nvtabular.framework_utils.tensorflow import layers  # noqa: E402 isort:skip
 import numpy as np
 
+import nvtx
+
 # we can control how much memory to give tensorflow with this environment variable
 # IMPORTANT: make sure you do this before you initialize TF's runtime, otherwise
 # TF will have claimed all free GPU memory
@@ -47,6 +49,7 @@ dataframe = pd.concat(df_list)
 
 
 mirrored_strategy = tf.distribute.MirroredStrategy()
+# mirrored_strategy = tf.distribute.MultiWorkerMirroredStrategy()
 print('Number of devices: {}'.format(mirrored_strategy.num_replicas_in_sync))
 
 
@@ -119,11 +122,11 @@ with mirrored_strategy.scope():
         per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
         return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
-
+    rng = nvtx.start_range(message="Training phase")
     for batch, (example, label) in enumerate(dist_dataset):
-        # if batch ==0:
-        #     print(example)
         loss_val = distributed_train_step((example, label))
         if batch % 100 ==0:
-            print("Step #%d\tLoss: " % (batch), loss_val)
-
+            print("Step #%d\tLoss: %.6f" % (batch, loss_val))
+        if batch == 1200:
+            break
+    nvtx.end_range(rng)
