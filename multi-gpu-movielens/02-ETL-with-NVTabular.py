@@ -14,7 +14,7 @@ INPUT_DATA_DIR = os.environ.get(
 )
 
 
-movies = cudf.read_parquet(os.path.join(INPUT_DATA_DIR, "movies_converted.parquet"))
+movies = cudf.read_parquet(os.path.join(INPUT_DATA_DIR, "ml-25m/movies_converted.parquet"))
 movies.head()
 
 

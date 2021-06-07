@@ -52,19 +52,19 @@ print('Number of devices: {}'.format(mirrored_strategy.num_replicas_in_sync))
 
 inputs = {}  # tf.keras.Input placeholders for each feature to be used
 emb_layers = []  # output of all embedding layers, which will be concatenated
-for col in CATEGORICAL_COLUMNS:
-    inputs[col] = tf.keras.Input(name=col, dtype=tf.int32, shape=(1,))
-for col in CATEGORICAL_COLUMNS:
-    emb_layers.append(
-        tf.feature_column.embedding_column(
-            tf.feature_column.categorical_column_with_identity(
-                col, EMBEDDING_TABLE_SHAPES[col][0]
-            ),  # Input dimension (vocab size)
-            EMBEDDING_TABLE_SHAPES[col][1],  # Embedding output dimension
-        )
-    )
-
 with mirrored_strategy.scope():
+    for col in CATEGORICAL_COLUMNS:
+        inputs[col] = tf.keras.Input(name=col, dtype=tf.int32, shape=(1,))
+    for col in CATEGORICAL_COLUMNS:
+        emb_layers.append(
+            tf.feature_column.embedding_column(
+                tf.feature_column.categorical_column_with_identity(
+                    col, EMBEDDING_TABLE_SHAPES[col][0]
+                ),  # Input dimension (vocab size)
+                EMBEDDING_TABLE_SHAPES[col][1],  # Embedding output dimension
+            )
+        )
+
     emb_layer = layers.DenseFeatures(emb_layers)
     x_emb_output = emb_layer(inputs)
     x = tf.keras.layers.BatchNormalization()(x_emb_output)
@@ -106,10 +106,16 @@ def training_step(examples, labels):
     return loss_value
 
 
+@tf.function
+def distributed_train_step(inputs):
+    per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
+    return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+
+
 for batch, (example, label) in enumerate(dist_dataset):
     # if batch ==0:
     #     print(example)
-    loss_val = training_step(example, label)
+    loss_val = distributed_train_step(example, label)
     if batch % 100 ==0:
         print("Step #%d\tLoss: %.6f" % (batch, loss_val))
 
