@@ -91,7 +91,7 @@ def create_dataframe_dict(dataframe):
 
 ds = tf.data.Dataset.from_tensor_slices(create_dataframe_dict(dataframe))
 
-ds = ds.batch(BATCH_SIZE).prefetch(tf.AUTOTUNE)
+ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 dist_dataset = mirrored_strategy.experimental_distribute_dataset(ds)
 
 
