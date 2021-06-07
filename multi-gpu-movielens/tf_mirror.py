@@ -92,18 +92,23 @@ def create_dataframe_dict(dataframe):
 
 ds = tf.data.Dataset.from_tensor_slices(create_dataframe_dict(dataframe))
 
+# batch_size = input_context.get_per_replica_batch_size(BATCH_SIZE)
 ds = ds.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
 dist_dataset = mirrored_strategy.experimental_distribute_dataset(ds)
 
 
 with mirrored_strategy.scope():
+    def compute_loss(labels, predictions):
+        per_example_loss = loss(labels, predictions)
+        return tf.nn.compute_average_loss(per_example_loss, global_batch_size=BATCH_SIZE)
+
     @tf.function(experimental_relax_shapes=True)
     def training_step(inputs):
         examples, labels = inputs
         with tf.GradientTape() as tape:
             probs = model(examples, training=True)
             # print(type(loss))
-            loss_value = loss(labels, probs)
+            loss_value = compute_loss(labels, probs)
         grads = tape.gradient(loss_value, model.trainable_variables)
         opt.apply_gradients(zip(grads, model.trainable_variables))
         return loss_value
