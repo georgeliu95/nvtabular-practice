@@ -76,7 +76,7 @@ with mirrored_strategy.scope():
 
     model = tf.keras.Model(inputs=inputs, outputs=x)
     opt = tf.keras.optimizers.Adam(0.001)
-    loss = tf.losses.BinaryCrossentropy()
+loss = tf.losses.BinaryCrossentropy()
 
 def create_dataframe_dict(dataframe):
     df = dataframe.copy()
