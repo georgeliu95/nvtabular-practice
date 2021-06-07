@@ -4,6 +4,7 @@ import glob
 import os
 
 import cupy
+import nvtx
 
 # we can control how much memory to give tensorflow with this environment variable
 # IMPORTANT: make sure you do this before you initialize TF's runtime, otherwise
@@ -133,6 +134,7 @@ def training_step(examples, labels, first_batch):
     return loss_value
 
 
+rng = nvtx.start_range(message="Training phase")
 # Horovod: adjust number of steps based on number of GPUs.
 for batch, (examples, labels) in enumerate(train_dataset_tf):
     if(batch==0) and (hvd.local_rank()==0):
@@ -147,6 +149,7 @@ for batch, (examples, labels) in enumerate(train_dataset_tf):
     if batch == int(1200 / hvd.size()):
             break
 hvd.join()
+nvtx.end_range(rng)
 
 # Horovod: save checkpoints only on worker 0 to prevent other workers from
 # corrupting it.
