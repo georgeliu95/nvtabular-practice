@@ -120,5 +120,5 @@ with mirrored_strategy.scope():
         #     print(example)
         loss_val = distributed_train_step((example, label))
         if batch % 100 ==0:
-            print("Step #%d\tLoss: %.6f" % (batch, loss_val))
+            print("Step #%d\tLoss: " % (batch), loss_val)
 
