@@ -96,7 +96,8 @@ dist_dataset = mirrored_strategy.experimental_distribute_dataset(ds)
 
 
 @tf.function(experimental_relax_shapes=True)
-def training_step(examples, labels):
+def training_step(inputs):
+    examples, labels = inputs
     with tf.GradientTape() as tape:
         probs = model(examples, training=True)
         print(type(loss))
@@ -115,7 +116,7 @@ def distributed_train_step(inputs):
 for batch, (example, label) in enumerate(dist_dataset):
     # if batch ==0:
     #     print(example)
-    loss_val = distributed_train_step(example, label)
+    loss_val = distributed_train_step((example, label))
     if batch % 100 ==0:
         print("Step #%d\tLoss: %.6f" % (batch, loss_val))
 
