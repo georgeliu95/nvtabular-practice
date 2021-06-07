@@ -99,7 +99,9 @@ for batch, (example, labels) in enumerate(train_dataset_tf):
     for it in labels:
         if it is not None:
             label = it[LABEL_COLUMNS[0]][0]
+    sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
     loss_value = training_step(example, label, batch == 0)
+    nvtx.end_range(sub_rng)
     if hvd.local_rank() == 0:
         print("Step #%d\tLoss: %.6f" % (batch+1, loss_value))
 
