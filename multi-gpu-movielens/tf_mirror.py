@@ -102,7 +102,7 @@ with mirrored_strategy.scope():
         examples, labels = inputs
         with tf.GradientTape() as tape:
             probs = model(examples, training=True)
-            print(type(loss))
+            # print(type(loss))
             loss_value = loss(labels, probs)
         grads = tape.gradient(loss_value, model.trainable_variables)
         opt.apply_gradients(zip(grads, model.trainable_variables))
