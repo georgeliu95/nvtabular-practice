@@ -6,10 +6,11 @@ import shutil
 import glob
 
 STEPS = 100
-GLOBAL_BATCH_SIZE = 2<<4# 15
-EMBEDDING_SIZE = 16# 512
-FEATURE_SIZE = 8*1024
-FEATURE_COLUMNS = ["features"]
+GLOBAL_BATCH_SIZE = 2<<15
+EMBEDDING_SIZE = 512
+# FEATURE_SIZE = 8*1024
+NUM_FEATURES = 3
+FEATURE_COLUMNS = ["features_" + str(idx) for idx in range(NUM_FEATURES)]
 LABEL_COLUMNS = ["labels"]
 
 if __name__ == "__main__":
@@ -17,10 +18,10 @@ if __name__ == "__main__":
     features_array = np.arange(start=0, stop=GLOBAL_BATCH_SIZE * STEPS, dtype=np.int64)
     labels_array = np.random.uniform(low=0, high=2, size=(GLOBAL_BATCH_SIZE * STEPS, 1)).astype(np.int64)
 
-    df = pd.DataFrame(data={FEATURE_COLUMNS[0]:[it for it in features_array],
-                            LABEL_COLUMNS[0]:[it for it in labels_array],
-                        }, 
-                        columns=(FEATURE_COLUMNS + LABEL_COLUMNS))
+    data_dict = {LABEL_COLUMNS[0]:labels_array.tolist()}
+    data_dict.update({it: features_array.tolist() for it in FEATURE_COLUMNS})
+
+    df = pd.DataFrame(data=data_dict, columns=(FEATURE_COLUMNS + LABEL_COLUMNS))
 
     print(df.head(5))
 
@@ -32,13 +33,11 @@ if __name__ == "__main__":
 
     print(workflow.fit(train_dataset))
 
-    dict_dtypes = {}
-
-    for col in FEATURE_COLUMNS:
-        dict_dtypes[col] = np.int64
-
-    for col in LABEL_COLUMNS:
-        dict_dtypes[col] = np.float32
+    # dict_dtypes = {}
+    # for col in FEATURE_COLUMNS:
+    #     dict_dtypes[col] = np.int64
+    # for col in LABEL_COLUMNS:
+    #     dict_dtypes[col] = np.float32
 
 
     if os.path.exists("./data/convert"):
@@ -51,7 +50,7 @@ if __name__ == "__main__":
         # dtypes=dict_dtypes,
     )
 
-    # print(nvt.ops.get_embedding_sizes(workflow))
+    print(nvt.ops.get_embedding_sizes(workflow))
 
     # new_df = pd.concat([pd.read_parquet(it) for it in sorted(glob.glob("./data/convert/*.parquet"))])
     # new_df.to_parquet("./data/convert/tf_train.parquet")
