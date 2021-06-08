@@ -15,7 +15,7 @@ LABEL_COLUMNS = ["labels"]
 
 if __name__ == "__main__":
     # features_array = np.random.normal(size=(GLOBAL_BATCH_SIZE, FEATURE_SIZE)).astype(np.float32)
-    features_array = np.arange(start=1, stop=GLOBAL_BATCH_SIZE * STEPS, dtype=np.int64)
+    features_array = np.arange(start=0, stop=GLOBAL_BATCH_SIZE * STEPS, dtype=np.int64)
     labels_array = np.random.uniform(low=0, high=2, size=(GLOBAL_BATCH_SIZE * STEPS, 1)).astype(np.int64)
 
     data_dict = {LABEL_COLUMNS[0]:labels_array.tolist()}
