@@ -1,8 +1,8 @@
 import glob
 import os
-from typing import NewType
 import cupy
 import numpy as np
+import time
 
 import nvtx
 from create_data import STEPS, GLOBAL_BATCH_SIZE, EMBEDDING_SIZE, FEATURE_COLUMNS, LABEL_COLUMNS
@@ -93,20 +93,27 @@ def training_step(examples, labels, first_batch):
     return loss_value
 
 
+train_time = 0
 rng = nvtx.start_range(message="Training phase")
 # Horovod: adjust number of steps based on number of GPUs.
 for batch, (example, labels) in enumerate(train_dataset_tf):
     for it in labels:
         if it is not None:
             label = it[LABEL_COLUMNS[0]][0]
+    start_time = time.time()
     sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
     loss_value = training_step(example, label, batch == 0)
     nvtx.end_range(sub_rng)
+    train_time += (time.time() - start_time)
     if hvd.local_rank() == 0:
+        # print("label.device=", label.device)
         print("Step #%d\tLoss: %.6f" % (batch+1, loss_value))
 
 hvd.join()
 nvtx.end_range(rng)
+
+if hvd.local_rank() == 0:
+    print("Training time = ", train_time)
 
 # Horovod: save checkpoints only on worker 0 to prevent other workers from
 # corrupting it.

@@ -1,6 +1,7 @@
 import tensorflow as tf
 import pandas as pd
 import os
+import time
 
 from nvtabular.framework_utils.tensorflow import layers  # noqa: E402 isort:skip
 import numpy as np
@@ -90,10 +91,15 @@ with mirrored_strategy.scope():
         per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
         return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
+    train_time = 0
     rng = nvtx.start_range(message="Training phase")
     for batch, (example, label) in enumerate(dist_dataset):
+        start_time = time.time()
         sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
         loss_val = distributed_train_step((example, label))
         nvtx.end_range(sub_rng)
+        train_time += (time.time() - start_time)
         print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
     nvtx.end_range(rng)
+
+    print("Training time = ", train_time)
