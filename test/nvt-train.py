@@ -106,6 +106,7 @@ for batch, (example, labels) in enumerate(train_dataset_tf):
     nvtx.end_range(sub_rng)
     train_time += (time.time() - start_time)
     if hvd.local_rank() == 0:
+        # [print("{}.device={}".format(it, example[it])) for it in example]
         # print("label.device=", label.device)
         print("Step #%d\tLoss: %.6f" % (batch+1, loss_value))
 

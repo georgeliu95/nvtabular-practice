@@ -1,0 +1,42 @@
+# C/C++
+*.d
+*.o
+*.obj
+*.so
+*.so.*
+*.a
+*.out
+
+# Python
+__pycache__/
+*.npz
+*.npy
+
+# CUDA
+*.i
+*.ii
+*.gpu
+*.ptx
+*.cubin
+*.fatbin
+
+# TensorRT
+*.trt
+
+# Log
+*.log
+
+# Nsight System
+*.qdrep
+
+# Others
+*.dat
+.vscode/
+log/
+profile/
+*.[0-9]
+*.deb
+*.run
+*.zip
+*.gz
+*.tar

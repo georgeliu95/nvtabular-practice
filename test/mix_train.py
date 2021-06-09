@@ -1,10 +1,8 @@
-import tensorflow as tf
-import pandas as pd
+import glob
 import os
-import time
-
-from nvtabular.framework_utils.tensorflow import layers  # noqa: E402 isort:skip
+import cupy
 import numpy as np
+import time
 
 import nvtx
 from create_data import STEPS, GLOBAL_BATCH_SIZE, EMBEDDING_SIZE, FEATURE_COLUMNS, LABEL_COLUMNS
@@ -14,15 +12,36 @@ from create_data import STEPS, GLOBAL_BATCH_SIZE, EMBEDDING_SIZE, FEATURE_COLUMN
 # TF will have claimed all free GPU memory
 os.environ["TF_MEMORY_ALLOCATION"] = "0.3"  # fraction of free memory
 
+import nvtabular as nvt  # noqa: E402 isort:skip
+from nvtabular.framework_utils.tensorflow import layers  # noqa: E402 isort:skip
+from nvtabular.loader.tensorflow import KerasSequenceLoader  # noqa: E402 isort:skip
+
+import tensorflow as tf  # noqa: E402 isort:skip
+
 
 mirrored_strategy = tf.distribute.MirroredStrategy()
 # mirrored_strategy = tf.distribute.MultiWorkerMirroredStrategy()
 print('Number of devices: {}'.format(mirrored_strategy.num_replicas_in_sync))
 
-
-inputs = {}  # tf.keras.Input placeholders for each feature to be used
-emb_layers = []  # output of all embedding layers, which will be concatenated
 with mirrored_strategy.scope():
+    train_dataset_tf = KerasSequenceLoader(
+        sorted(glob.glob("./data/convert/*.parquet")),  # you could also use a glob pattern
+        batch_size=GLOBAL_BATCH_SIZE,
+        label_names=LABEL_COLUMNS,
+        cat_names=FEATURE_COLUMNS,
+        cont_names=None,
+        engine="parquet",
+        shuffle=False,
+        buffer_size=0.06,  # how many batches to load at once
+        parts_per_chunk=1,
+        # global_size=hvd.size(),
+        # global_rank=hvd.rank(),
+        seed_fn=None,
+    )
+
+
+    inputs = {}  # tf.keras.Input placeholders for each feature to be used
+    emb_layers = []  # output of all embedding layers, which will be concatenated
     for col in FEATURE_COLUMNS:
         inputs[col] = tf.keras.Input(name=col, dtype=tf.int64, shape=(1,))
     for col in FEATURE_COLUMNS:
@@ -47,26 +66,6 @@ with mirrored_strategy.scope():
     model = tf.keras.Model(inputs=inputs, outputs=x)
     opt = tf.keras.optimizers.Adam(0.001)
     loss = tf.keras.losses.BinaryCrossentropy(from_logits=True,  reduction=tf.keras.losses.Reduction.NONE)
-
-def create_dataframe_dict(df):
-    labels = df.pop(LABEL_COLUMNS[0])
-    dataframe_dict = dict(df)
-    for it in dataframe_dict:
-        dataframe_dict[it] = dataframe_dict[it].ravel().reshape(-1,1)
-    labels = labels.ravel().reshape(-1,1).astype(np.float32)
-    return dataframe_dict, labels
-
-ds = tf.data.Dataset.from_tensor_slices(create_dataframe_dict(pd.read_parquet("./data/train.parquet")))
-
-
-
-
-
-# -------------------------------------------------------------------------------------------------- #
-
-# batch_size = input_context.get_per_replica_batch_size(BATCH_SIZE)
-ds = ds.batch(GLOBAL_BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-dist_dataset = mirrored_strategy.experimental_distribute_dataset(ds)
 
 
 with mirrored_strategy.scope():
@@ -93,7 +92,10 @@ with mirrored_strategy.scope():
 
     train_time = 0
     rng = nvtx.start_range(message="Training phase")
-    for batch, (example, label) in enumerate(dist_dataset):
+    for batch, (example, labels) in enumerate(train_dataset_tf):
+        for it in labels:
+            if it is not None:
+                label = it[LABEL_COLUMNS[0]][0]
         # [print("{}.device={}".format(it, example[it])) for it in example]
         # print("label.device=", label.device)
         start_time = time.time()
@@ -105,3 +107,4 @@ with mirrored_strategy.scope():
     nvtx.end_range(rng)
 
     print("Training time = ", train_time)
+
