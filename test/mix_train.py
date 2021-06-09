@@ -119,6 +119,8 @@ with mirrored_strategy.scope():
         train_time = 0
         rng = nvtx.start_range(message="Training phase")
         for batch, (examples, labels) in enumerate(nvt_loader):
+            if batch == steps:
+                break
             start_time = time.time()
             sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
             loss_val = distributed_train_step(examples, labels[1][LABEL_COLUMNS[0]][0])
