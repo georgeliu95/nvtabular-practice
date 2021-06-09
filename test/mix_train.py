@@ -97,7 +97,7 @@ with mirrored_strategy.scope():
     def training_step(inputs):
         idx = int(tf.distribute.get_replica_context().replica_id_in_sync_group.device[-1])
         print(inputs[idx], "\n"*5)
-        examples, tmp_labels = inputs[idx]
+        examples, tmp_labels = next(inputs[idx])
         for it in tmp_labels:
             if it is not None:
                 labels = it[LABEL_COLUMNS[0]][0]
