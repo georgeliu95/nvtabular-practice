@@ -95,9 +95,8 @@ with mirrored_strategy.scope():
 
     @tf.function(experimental_relax_shapes=True)
     def training_step(inputs):
-        idx = int(tf.distribute.get_replica_context().replica_id_in_sync_group.device[-1])
-        print(inputs[idx], "\n"*5)
-        examples, tmp_labels = next(inputs[idx])
+        
+        
         # for it in tmp_labels:
         #     if it is not None:
         #         labels = it[LABEL_COLUMNS[0]][0]
@@ -115,22 +114,36 @@ with mirrored_strategy.scope():
         per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
         return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
-    train_time = 0
-    rng = nvtx.start_range(message="Training phase")
+
+    def custom_train_step_fn(inputs, steps):
+        idx = int(tf.distribute.get_replica_context().replica_id_in_sync_group.device[-1])
+        print(inputs[idx], "\n"*5)
+        nvt_loader = inputs[idx]
+
+        train_time = 0
+        rng = nvtx.start_range(message="Training phase")
+        for batch, (examples, labels) in enumerate(nvt_loader):
+            start_time = time.time()
+            sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
+            loss_val = distributed_train_step()
+            nvtx.end_range(sub_rng)
+            train_time += (time.time() - start_time)
+            print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
+        nvtx.end_range(rng)
+
+        print("Training time = ", train_time)
+
+
     # for batch, (example, labels) in enumerate(per_replica_dataset):
     #     for it in labels:
     #         if it is not None:
     #             label = it[LABEL_COLUMNS[0]][0]
         # [print("{}.device={}".format(it, example[it].device)) for it in example]
         # print("label.device=", label.device)
-    for batch in range(STEPS // mirrored_strategy.num_replicas_in_sync):
-        start_time = time.time()
-        sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
-        loss_val = distributed_train_step(mirrored_strategy.experimental_local_results(per_replica_dataset))
-        nvtx.end_range(sub_rng)
-        train_time += (time.time() - start_time)
-        print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
-    nvtx.end_range(rng)
 
-    print("Training time = ", train_time)
+
+    mirrored_strategy.run(custom_train_step_fn, args=(mirrored_strategy.experimental_local_results(per_replica_dataset), STEPS // mirrored_strategy.num_replicas_in_sync))
+
+
+
 
