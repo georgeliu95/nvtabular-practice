@@ -72,6 +72,22 @@ with mirrored_strategy.scope():
     loss = tf.keras.losses.BinaryCrossentropy(from_logits=True,  reduction=tf.keras.losses.Reduction.NONE)
 
 
+# with mirrored_strategy.scope():
+#     def process_label_fn(inputs):
+#         idx = tf.distribute.get_replica_context().replica_id_in_sync_group
+#         _, tmp_labels = inputs[idx]
+#         for it in tmp_labels:
+#             if it is not None:
+#                 labels = it[LABEL_COLUMNS[0]][0]
+#         return 
+
+#     per_replica_dataset = mirrored_strategy.run(process_label_fn, args=(mirrored_strategy.experimental_local_results(per_replica_dataset),))
+
+
+
+
+
+
 with mirrored_strategy.scope():
     def compute_loss(labels, predictions):
         per_example_loss = loss(labels, predictions)
@@ -79,7 +95,11 @@ with mirrored_strategy.scope():
 
     @tf.function(experimental_relax_shapes=True)
     def training_step(inputs):
-        examples, labels = inputs
+        idx = tf.distribute.get_replica_context().replica_id_in_sync_group
+        examples, tmp_labels = inputs[idx]
+        for it in tmp_labels:
+            if it is not None:
+                labels = it[LABEL_COLUMNS[0]][0]
         with tf.GradientTape() as tape:
             probs = model(examples, training=True)
             # print(type(loss))
@@ -96,15 +116,16 @@ with mirrored_strategy.scope():
 
     train_time = 0
     rng = nvtx.start_range(message="Training phase")
-    for batch, (example, labels) in enumerate(per_replica_dataset):
-        for it in labels:
-            if it is not None:
-                label = it[LABEL_COLUMNS[0]][0]
+    # for batch, (example, labels) in enumerate(per_replica_dataset):
+    #     for it in labels:
+    #         if it is not None:
+    #             label = it[LABEL_COLUMNS[0]][0]
         # [print("{}.device={}".format(it, example[it].device)) for it in example]
         # print("label.device=", label.device)
+    for batch in range(STEPS // mirrored_strategy.num_replicas_in_sync):
         start_time = time.time()
         sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
-        loss_val = distributed_train_step((example, label))
+        loss_val = distributed_train_step(mirrored_strategy.experimental_local_results(per_replica_dataset))
         nvtx.end_range(sub_rng)
         train_time += (time.time() - start_time)
         print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
