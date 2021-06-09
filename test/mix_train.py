@@ -95,8 +95,7 @@ with mirrored_strategy.scope():
 
     @tf.function(experimental_relax_shapes=True)
     def training_step(inputs):
-        idx = tf.distribute.get_replica_context().replica_id_in_sync_group
-        examples, tmp_labels = inputs[idx]
+        examples, tmp_labels = inputs
         for it in tmp_labels:
             if it is not None:
                 labels = it[LABEL_COLUMNS[0]][0]
@@ -125,7 +124,7 @@ with mirrored_strategy.scope():
     for batch in range(STEPS // mirrored_strategy.num_replicas_in_sync):
         start_time = time.time()
         sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
-        loss_val = distributed_train_step(mirrored_strategy.experimental_local_results(per_replica_dataset))
+        loss_val = distributed_train_step(mirrored_strategy.experimental_local_results(per_replica_dataset)[tf.distribute.get_replica_context().replica_id_in_sync_group])
         nvtx.end_range(sub_rng)
         train_time += (time.time() - start_time)
         print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
