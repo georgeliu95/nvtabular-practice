@@ -98,13 +98,13 @@ with mirrored_strategy.scope():
         idx = int(tf.distribute.get_replica_context().replica_id_in_sync_group.device[-1])
         print(inputs[idx], "\n"*5)
         examples, tmp_labels = next(inputs[idx])
-        for it in tmp_labels:
-            if it is not None:
-                labels = it[LABEL_COLUMNS[0]][0]
+        # for it in tmp_labels:
+        #     if it is not None:
+        #         labels = it[LABEL_COLUMNS[0]][0]
         with tf.GradientTape() as tape:
             probs = model(examples, training=True)
             # print(type(loss))
-            loss_value = compute_loss(labels, probs)
+            loss_value = compute_loss(tmp_labels[0][LABEL_COLUMNS[0]][0], probs)
         grads = tape.gradient(loss_value, model.trainable_variables)
         opt.apply_gradients(zip(grads, model.trainable_variables))
         return loss_value
