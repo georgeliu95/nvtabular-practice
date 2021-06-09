@@ -23,7 +23,8 @@ mirrored_strategy = tf.distribute.MirroredStrategy()
 # mirrored_strategy = tf.distribute.MultiWorkerMirroredStrategy()
 print('Number of devices: {}'.format(mirrored_strategy.num_replicas_in_sync))
 
-with mirrored_strategy.scope():
+def get_dataset_fn():
+    idx = tf.distribute.get_replica_context().replica_id_in_sync_group
     train_dataset_tf = KerasSequenceLoader(
         sorted(glob.glob("./data/convert/*.parquet")),  # you could also use a glob pattern
         batch_size=GLOBAL_BATCH_SIZE,
@@ -34,14 +35,17 @@ with mirrored_strategy.scope():
         shuffle=False,
         buffer_size=0.06,  # how many batches to load at once
         parts_per_chunk=1,
-        # global_size=hvd.size(),
-        # global_rank=hvd.rank(),
+        global_size=mirrored_strategy.num_replicas_in_sync,
+        global_rank=idx,
         seed_fn=None,
     )
+    return train_dataset_tf
 
+per_replica_dataset = mirrored_strategy.run(get_dataset_fn)
 
-    inputs = {}  # tf.keras.Input placeholders for each feature to be used
-    emb_layers = []  # output of all embedding layers, which will be concatenated
+inputs = {}  # tf.keras.Input placeholders for each feature to be used
+emb_layers = []  # output of all embedding layers, which will be concatenated
+with mirrored_strategy.scope():
     for col in FEATURE_COLUMNS:
         inputs[col] = tf.keras.Input(name=col, dtype=tf.int64, shape=(1,))
     for col in FEATURE_COLUMNS:
@@ -92,7 +96,7 @@ with mirrored_strategy.scope():
 
     train_time = 0
     rng = nvtx.start_range(message="Training phase")
-    for batch, (example, labels) in enumerate(train_dataset_tf):
+    for batch, (example, labels) in enumerate(per_replica_dataset):
         for it in labels:
             if it is not None:
                 label = it[LABEL_COLUMNS[0]][0]
