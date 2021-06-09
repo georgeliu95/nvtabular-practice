@@ -107,7 +107,8 @@ with mirrored_strategy.scope():
 
     @tf.function
     def distributed_train_step(inputs):
-        per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
+        # per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
+        per_replica_losses = training_step(inputs)
         return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
 
