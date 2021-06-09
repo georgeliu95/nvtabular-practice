@@ -123,7 +123,7 @@ with mirrored_strategy.scope():
                 break
             start_time = time.time()
             sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
-            loss_val = distributed_train_step(examples, labels[1][LABEL_COLUMNS[0]][0])
+            loss_val = distributed_train_step((examples, labels[1][LABEL_COLUMNS[0]][0]))
             nvtx.end_range(sub_rng)
             train_time += (time.time() - start_time)
             print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
