@@ -95,15 +95,11 @@ with mirrored_strategy.scope():
 
     @tf.function(experimental_relax_shapes=True)
     def training_step(inputs):
-        
-        
-        # for it in tmp_labels:
-        #     if it is not None:
-        #         labels = it[LABEL_COLUMNS[0]][0]
+        examples, labels = inputs
         with tf.GradientTape() as tape:
             probs = model(examples, training=True)
             # print(type(loss))
-            loss_value = compute_loss(tmp_labels[1][LABEL_COLUMNS[0]][0], probs)
+            loss_value = compute_loss(labels, probs)
         grads = tape.gradient(loss_value, model.trainable_variables)
         opt.apply_gradients(zip(grads, model.trainable_variables))
         return loss_value
@@ -117,15 +113,15 @@ with mirrored_strategy.scope():
 
     def custom_train_step_fn(inputs, steps):
         idx = int(tf.distribute.get_replica_context().replica_id_in_sync_group.device[-1])
-        print(inputs[idx], "\n"*5)
         nvt_loader = inputs[idx]
+        print(nvt_loader, "\n"*5)
 
         train_time = 0
         rng = nvtx.start_range(message="Training phase")
         for batch, (examples, labels) in enumerate(nvt_loader):
             start_time = time.time()
             sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
-            loss_val = distributed_train_step()
+            loss_val = distributed_train_step(examples, labels[1][LABEL_COLUMNS[0]][0])
             nvtx.end_range(sub_rng)
             train_time += (time.time() - start_time)
             print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
