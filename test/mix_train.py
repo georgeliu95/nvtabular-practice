@@ -96,7 +96,7 @@ with mirrored_strategy.scope():
         for it in labels:
             if it is not None:
                 label = it[LABEL_COLUMNS[0]][0]
-        # [print("{}.device={}".format(it, example[it])) for it in example]
+        # [print("{}.device={}".format(it, example[it].device)) for it in example]
         # print("label.device=", label.device)
         start_time = time.time()
         sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))

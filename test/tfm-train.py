@@ -94,8 +94,9 @@ with mirrored_strategy.scope():
     train_time = 0
     rng = nvtx.start_range(message="Training phase")
     for batch, (example, label) in enumerate(dist_dataset):
-        # [print("{}.device={}".format(it, example[it])) for it in example]
-        # print("label.device=", label.device)
+        for i in range(mirrored_strategy.num_replicas_in_sync):
+            [print("{}[{}].device={}".format(it, i, example[it].values[i].device)) for it in example]
+            print("label[{}].device=".format(i), label.values[i].device)
         start_time = time.time()
         sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
         loss_val = distributed_train_step((example, label))
