@@ -24,7 +24,7 @@ mirrored_strategy = tf.distribute.MirroredStrategy()
 print('Number of devices: {}'.format(mirrored_strategy.num_replicas_in_sync))
 
 class replicaWrapper(object):
-    def __init__(self, replica_dataset, num_dataset=1):
+    def __init__(self, replica_dataset, num_dataset=mirrored_strategy.num_replicas_in_sync):
         self.dataset = mirrored_strategy.experimental_local_results(replica_dataset)
         self.num_dataset = num_dataset
 
@@ -107,7 +107,7 @@ with mirrored_strategy.scope():
 
 
 print(type(per_replica_dataset))
-test_replica = replicaWrapper(per_replica_dataset,2)
+test_replica = replicaWrapper(per_replica_dataset,)
 # for it in test_replica:
 #     print(it[0])
 #     print(type(it), type(it[-1]))
