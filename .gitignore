@@ -40,3 +40,5 @@ profile/
 *.zip
 *.gz
 *.tar
+categories/
+data/

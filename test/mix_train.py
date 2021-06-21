@@ -23,6 +23,28 @@ mirrored_strategy = tf.distribute.MirroredStrategy()
 # mirrored_strategy = tf.distribute.MultiWorkerMirroredStrategy()
 print('Number of devices: {}'.format(mirrored_strategy.num_replicas_in_sync))
 
+class replicaWrapper(object):
+    def __init__(self, replica_dataset, num_dataset=1):
+        self.dataset = mirrored_strategy.experimental_local_results(replica_dataset)
+        self.num_dataset = num_dataset
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        data_per_batch = list()
+        for i in range(self.num_dataset):
+            # print(self.dataset[i])
+            next_batch = next(self.dataset[i])
+            examples, labels = next_batch
+            for it in labels:
+                if it is not None:
+                    label = it[LABEL_COLUMNS[0]][0]
+            next_batch = examples, label
+            data_per_batch.append(next_batch)
+        return data_per_batch
+
+
 def get_dataset_fn():
     idx = tf.distribute.get_replica_context().replica_id_in_sync_group
     train_dataset_tf = KerasSequenceLoader(
@@ -84,7 +106,43 @@ with mirrored_strategy.scope():
 #     per_replica_dataset = mirrored_strategy.run(process_label_fn, args=(mirrored_strategy.experimental_local_results(per_replica_dataset),))
 
 
+print(type(per_replica_dataset))
+test_replica = replicaWrapper(per_replica_dataset,2)
+# for it in test_replica:
+#     print(it[0])
+#     print(type(it), type(it[-1]))
+#     break
 
+
+
+def compute_loss(labels, predictions):
+    per_example_loss = loss(labels, predictions)
+    return tf.nn.compute_average_loss(per_example_loss, global_batch_size=GLOBAL_BATCH_SIZE)
+
+def train_step(inputs):
+    idx = int(tf.distribute.get_replica_context().replica_id_in_sync_group.device[-1])
+    print(len(inputs))
+    nvt_loader = inputs[idx]
+    features, labels = nvt_loader
+
+    with tf.GradientTape() as tape:
+        predictions = model(features, training=True)
+        loss = compute_loss(labels, predictions)
+
+    gradients = tape.gradient(loss, model.trainable_variables)
+    opt.apply_gradients(zip(gradients, model.trainable_variables))
+    return loss 
+
+@tf.function
+def distributed_train_step(inputs):
+    per_replica_losses = mirrored_strategy.run(train_step, args=(inputs,))
+    return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
+
+for batch in test_replica:
+    print(len(batch))
+    print(distributed_train_step(batch))
+
+exit()
 
 
 
@@ -105,10 +163,10 @@ with mirrored_strategy.scope():
         return loss_value
 
 
-    @tf.function
+    # @tf.function
     def distributed_train_step(inputs):
-        # per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
-        per_replica_losses = training_step(inputs)
+        per_replica_losses = mirrored_strategy.run(training_step, args=(inputs,))
+        # per_replica_losses = tf.distribute.get_replica_context().merge_call(training_step, args=(inputs,))
         return mirrored_strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
 
@@ -117,20 +175,13 @@ with mirrored_strategy.scope():
         nvt_loader = inputs[idx]
         print(nvt_loader, "\n"*5)
 
-        train_time = 0
-        rng = nvtx.start_range(message="Training phase")
+
         for batch, (examples, labels) in enumerate(nvt_loader):
             if batch == steps:
                 break
-            start_time = time.time()
-            sub_rng = nvtx.start_range(message="Epoch_" + str(batch+1))
             loss_val = distributed_train_step((examples, labels[1][LABEL_COLUMNS[0]][0]))
-            nvtx.end_range(sub_rng)
-            train_time += (time.time() - start_time)
             print("Step #%d\tLoss: %.6f" % (batch+1, loss_val))
-        nvtx.end_range(rng)
 
-        print("Training time = ", train_time)
 
 
     # for batch, (example, labels) in enumerate(per_replica_dataset):
@@ -141,7 +192,7 @@ with mirrored_strategy.scope():
         # print("label.device=", label.device)
 
 
-    mirrored_strategy.run(custom_train_step_fn, args=(mirrored_strategy.experimental_local_results(per_replica_dataset), STEPS // mirrored_strategy.num_replicas_in_sync))
+mirrored_strategy.run(custom_train_step_fn, args=(mirrored_strategy.experimental_local_results(per_replica_dataset), STEPS // mirrored_strategy.num_replicas_in_sync))
 
 
 
