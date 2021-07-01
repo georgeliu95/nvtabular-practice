@@ -10,7 +10,7 @@ from create_data import STEPS, GLOBAL_BATCH_SIZE, EMBEDDING_SIZE, FEATURE_COLUMN
 # we can control how much memory to give tensorflow with this environment variable
 # IMPORTANT: make sure you do this before you initialize TF's runtime, otherwise
 # TF will have claimed all free GPU memory
-os.environ["TF_MEMORY_ALLOCATION"] = "0.3"  # fraction of free memory
+os.environ["TF_MEMORY_ALLOCATION"] = "0.6"  # fraction of free memory
 
 import nvtabular as nvt  # noqa: E402 isort:skip
 from nvtabular.framework_utils.tensorflow import layers  # noqa: E402 isort:skip
